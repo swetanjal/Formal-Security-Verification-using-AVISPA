@@ -1,0 +1,181 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%% Registration Authority
+role registrationAuth(RA, SC, SSW: agent, H: hash_func, Snd, Rcv: channel(dy))
+
+played_by RA def=
+local
+    State: nat,
+    Skcon, Sksw: symmetric_key,
+    %%% F is elliptical curve multiplication & Add is addition/multiplication operator
+    F, Add: hash_func,
+    IDCon, IDSw, IDClus, PRVRa, PRVCon, PRVSw, PUBRa, PUBCon, PUBSw, G, CERTCon, CERTSw: message
+const prvra, prvcon, prvsw: protocol_id
+
+init
+    State := 0
+
+transition
+
+%%% Controller Registration
+1. State = 0 /\ Rcv(start) =|> State':= 1 /\
+
+%%% Generate private key and public key for Registration Authority 
+PRVRa' := new() /\ PUBRa' := F(PRVRa'.G) /\
+
+%%% Generate private key and public key for Controller
+PRVCon' := new() /\ PUBCon' := F(PRVCon'.G) /\
+
+%%% Generate certificate for controller
+CERTCon' := Add(PRVCon'.H(IDCon.IDClus.PUBCon'.PUBRa').PRVRa') /\
+
+%%% Send Registration message via secure channel
+Snd({IDCon.PRVCon'.CERTCon'}_Skcon) /\
+secret({PRVRa'}, prvra, RA) /\
+secret({PRVCon'}, prvcon, {RA, SC}) /\
+
+%%% Switch Registration
+PRVSw' := new() /\ PUBSw' := F(PRVSw'.G) /\
+CERTSw' := Add(PRVSw'.H(IDSw.IDClus.PUBSw'.PUBRa').PRVRa') /\
+
+%%% Send Registration via secure channel(offline registration)
+Snd({IDSw.PRVSw'.CERTSw'}_Sksw) /\
+secret({PRVSw'}, prvsw, {RA, SSW})
+
+end role
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%% Controller
+role controller(RA, SC, SSW: agent, H: hash_func, Snd, Rcv: channel(dy))
+
+played_by SC def=
+local
+    State : nat,
+    Skcon: symmetric_key,
+    %%% F is elliptical curve multiplication & Add is addition/multiplication operator
+    F, Add, Poly: hash_func,
+    G, IDCon, IDSw, PRVCon, IDClus, PRVRa, R1, R2, TS1, FCONSWI, ACON, BCON: message,
+    TS2, PRVSw: message
+
+init
+    State := 0
+    
+transition
+
+%%% Registration phase acceptance
+1. State = 0 /\ Rcv({IDCon.PRVCon'.Add(PRVCon'.H(IDCon.IDClus.F(PRVCon'.G).F(PRVRa'.G)).PRVRa')}_Skcon)
+=|> State' := 2 /\ secret(PRVRa', prvra, RA) /\ secret(PRVCon', prvcon, {RA, SC}) /\
+
+%%% Access control phase
+R1' := new() /\ TS1' := new() /\ FCONSWI':= Poly(IDCon.IDSw) /\
+ACON' := H(R1'.TS1').xor(H(FCONSWI'.TS1')) /\
+BCON' := H(IDCon.IDSw.ACON'.TS1'.Add(PRVCon'.H(IDCon.IDClus.F(PRVCon'.G).F(PRVRa'.G)).PRVRa').FCONSWI')
+/\
+
+%%% Send message over public channel
+Snd(IDCon.IDSw.Add(PRVCon'.H(IDCon.IDClus.F(PRVCon'.G).F(PRVRa'.G)).PRVRa').ACON'.BCON'.TS1') /\
+
+%%% SC has freshly generated the values R1' and TS1' for SSW
+witness(SC, SSW, scsswr1, R1') /\
+witness(SC, SSW, scsswts1, TS1')
+
+2. State = 2 /\ Rcv(IDCon'.IDSw'.Add(PRVSw'.H(IDSw'.IDClus'.F(PRVSw'.G').F(PRVRa'.G')).PRVRa').
+(H(R2'.TS2').xor(H(Poly(IDSw'.IDCon').TS2'))).H(H(Poly(IDSw'.IDCon').((H(R1'.TS1').
+xor(H(Poly(IDCon'.IDSw').TS1'))).xor(H(Poly(IDSw'.IDCon').TS1'))).H(R2'.TS2').
+Add(PRVCon'.H(IDCon'.IDClus'.F(PRVCon'.G').F(PRVRa'.G')).PRVRa')
+.Add(PRVSw'.H(IDSw'.IDClus'.F(PRVSw'.G').F(PRVRa'.G')).PRVRa'))
+.(H(R2'.TS2').xor(H(Poly(IDSw'.IDCon').TS2'))).Add(PRVSw'.H(IDSw'.IDClus'.F(PRVSw'.G')
+.F(PRVRa'.G')).PRVRa').IDCon'.IDSw'.TS2').TS2') =|>
+State' := 5 /\
+request(SSW, SC, sswscr2, R2') /\
+request(SSW, SC, sswscts2, TS2')
+
+end role
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%% Switch
+role switch(RA, SC, SSW: agent, H: hash_func, Snd, Rcv: channel(dy))
+
+played_by SSW def=
+local
+    State : nat,
+    Sksw: symmetric_key,
+    %% F is elliptical curve multiplication & Add is addition/multiplication operator
+    F, Add, Poly: hash_func,
+    IDCon, IDSw, PRVSw, IDClus, G, PRVRa, R2, TS2, ASWI, SKswicon, R1 : message,
+    TS1, PRVCon, SKVswicon: message
+    
+init
+    State := 0
+
+transition
+
+% Registration acceptance phase
+1. State = 0 /\ Rcv({IDSw.PRVSw'.Add(PRVSw'.H(IDSw.IDClus.F(PRVSw'.G).F(PRVRa'.G)).PRVRa')}_Sksw) =|>
+State' := 3 /\ secret(PRVRa', prvra, RA) /\ secret(PRVSw', prvsw, {RA, SSW})
+
+% Access Control Phase
+
+2. State = 3 /\ Rcv(IDCon.IDSw.Add(PRVCon'.H(IDCon.IDClus.F(PRVCon'.G).F(PRVRa'.G)).PRVRa').
+        H(R1'.TS1').xor(H(Poly(IDCon.IDSw).TS1')).
+        H(IDCon.IDSw.H(R1'.TS1').xor(H(Poly(IDCon.IDSw).TS1'))
+        .TS1'.Add(PRVCon'.H(IDCon.IDClus.F(PRVCon'.G).F(PRVRa'.G)).PRVRa').Poly(IDCon.IDSw))
+        .TS1') =|>
+State' := 4 /\
+R2' := new() /\ TS2' := new() /\
+ASWI' := H(R2'.TS2').xor(H(Poly(IDSw.IDCon).TS2')) /\
+SKswicon' := H(Poly(IDSw.IDCon).((H(R1'.TS1').xor(H(Poly(IDCon.IDSw).TS1'))).xor(H(Poly(IDSw.IDCon).TS1'))).H(R2'.TS2').
+            Add(PRVCon'.H(IDCon.IDClus.F(PRVCon'.G).F(PRVRa'.G)).PRVRa')
+            .Add(PRVSw'.H(IDSw.IDClus.F(PRVSw'.G).F(PRVRa'.G)).PRVRa')) /\
+SKVswicon' := H(SKswicon'.ASWI'.Add(PRVSw'.H(IDSw.IDClus.F(PRVSw'.G).F(PRVRa'.G)).PRVRa').IDCon.IDSw.TS2') /\
+Snd(IDCon.IDSw.Add(PRVSw'.H(IDSw.IDClus.F(PRVSw'.G).F(PRVRa'.G)).PRVRa').ASWI'.SKVswicon'.TS2') /\ % 
+
+witness(SSW, SC, sswscr2, R2') /\
+witness(SSW, SC, sswscts2, TS2') /\
+request(SC, SSW, scsswr1, R1') /\
+request(SC, SSW, scsswts1, TS1')
+
+end role
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Define session role
+role session(RA, SC, SSW: agent, H: hash_func)
+def=
+local
+    SCSND, SCRCV, SSWSND, SSWRCV, RASND, RARCV: channel(dy),
+    SNDT, RCVT: channel(dy)
+composition
+    registrationAuth(RA, SC, SSW, H, RASND, RARCV) /\
+    controller(RA, SC, SSW, H, SCSND, SCRCV) /\
+    switch(RA, SC, SSW, H, SSWSND, SSWRCV)
+
+end role
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Define environment role
+role environment() def= 
+const 
+    ra, sc, ssw: agent,
+    h, f, add, poly: hash_func,
+    prvra, prvcon, prvsw: protocol_id,
+    scsswts1, scsswr1 : protocol_id,
+    sswscr2, sswscts2: protocol_id
+
+intruder_knowledge = {ra, sc, ssw, h, prvra, prvcon, prvsw, sswscr2, sswscts2, scsswts1, 
+scsswr1, f, add, poly}
+
+composition
+    session(ra, sc, ssw, h)
+end role
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+goal
+secrecy_of prvra
+secrecy_of prvcon
+secrecy_of prvsw
+authentication_on scsswr1 
+authentication_on scsswts1
+authentication_on sswscr2
+authentication_on sswscts2
+end goal
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+environment()
