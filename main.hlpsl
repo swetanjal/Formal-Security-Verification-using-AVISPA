@@ -157,8 +157,7 @@ const
     h, f, add, poly: hash_func,
     prvra, prvcon, prvsw: protocol_id,
     scsswts1, scsswr1 : protocol_id,
-    sswscr2, sswscts2: protocol_id
-
+    sswscr2, sswscts2 : protocol_id
 intruder_knowledge = {ra, sc, ssw, h, f, add, poly}
 
 composition
@@ -173,6 +172,7 @@ goal
 secrecy_of prvra
 secrecy_of prvcon
 secrecy_of prvsw
+
 % Authentication
 authentication_on scsswr1 
 authentication_on scsswts1
