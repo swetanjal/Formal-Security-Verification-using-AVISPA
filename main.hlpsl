@@ -141,8 +141,7 @@ end role
 role session(RA, SC, SSW: agent, H: hash_func)
 def=
 local
-    SCSND, SCRCV, SSWSND, SSWRCV, RASND, RARCV: channel(dy),
-    SNDT, RCVT: channel(dy)
+    SCSND, SCRCV, SSWSND, SSWRCV, RASND, RARCV: channel(dy)
 composition
     registrationAuth(RA, SC, SSW, H, RASND, RARCV) /\
     controller(RA, SC, SSW, H, SCSND, SCRCV) /\
@@ -160,18 +159,21 @@ const
     scsswts1, scsswr1 : protocol_id,
     sswscr2, sswscts2: protocol_id
 
-intruder_knowledge = {ra, sc, ssw, h, prvra, prvcon, prvsw, sswscr2, sswscts2, scsswts1, 
-scsswr1, f, add, poly}
+intruder_knowledge = {ra, sc, ssw, h, f, add, poly}
 
 composition
-    session(ra, sc, ssw, h)
+    session(ra, sc, ssw, h) /\
+    session(ra, sc, i, h) /\
+    session(ra, i, ssw, h)
 end role
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 goal
+% Confidentiality of Private Keys
 secrecy_of prvra
 secrecy_of prvcon
 secrecy_of prvsw
+% Authentication
 authentication_on scsswr1 
 authentication_on scsswts1
 authentication_on sswscr2
