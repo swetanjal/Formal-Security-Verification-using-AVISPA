@@ -1,10 +1,3 @@
-# Team 4
-
-- Swetanjal Dutta - 20171077
-- Paryul Jain - 20171083
-- Eesha Dutta - 20171104
-- Meghana Bommadi - 20171165
-
 ### Paper Title: 
 
 On the Design of Blockchain-Based Access Control Scheme for Software Defined Networks
